@@ -1,0 +1,221 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: >
+  TalentAxis Production Infrastructure - EC2 Instance with Nginx, Node.js 20,
+  PM2, and Security Group for hosting full-stack MERN application.
+
+Parameters:
+  InstanceType:
+    Type: String
+    Default: t2.micro
+    AllowedValues:
+      - t2.micro
+      - t2.small
+      - t3.micro
+      - t3.small
+      - t3.medium
+    Description: EC2 instance type (t2.micro / t3.micro is AWS Free Tier eligible).
+
+  KeyName:
+    Type: AWS::EC2::KeyPair::KeyName
+    Description: Name of an existing EC2 KeyPair to enable SSH access to the instance.
+
+  SSHLocation:
+    Type: String
+    MinLength: 9
+    MaxLength: 18
+    Default: 0.0.0.0/0
+    AllowedPattern: (\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})/(\d{1,2})
+    ConstraintDescription: Must be a valid IP CIDR range of the form x.x.x.x/x.
+    Description: The IP address range that can be used to SSH into the EC2 instance.
+
+  LatestAmiId:
+    Type: AWS::SSM::Parameter::Value<AWS::EC2::Image::Id>
+    Default: /aws/service/ami-amazon-linux-latest/al2023-ami-kernel-default-x86_64
+    Description: Automatically selects the latest Amazon Linux 2023 AMI for the deployment region.
+
+Resources:
+  # Security Group: Expose HTTP (80) & SSH (22). Backend port 5000 is internal-only.
+  TalentAxisSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for TalentAxis MERN portal (HTTP and SSH access)
+      SecurityGroupIngress:
+        - IpProtocol: tcp
+          FromPort: 80
+          ToPort: 80
+          CidrIp: 0.0.0.0/0
+          Description: Allow public HTTP web traffic
+        - IpProtocol: tcp
+          FromPort: 22
+          ToPort: 22
+          CidrIp: !Ref SSHLocation
+          Description: Allow SSH remote management
+      Tags:
+        - Key: Name
+          Value: talentaxis-security-group
+        - Key: Project
+          Value: TalentAxis
+
+  # IAM Role for EC2 with AWS Systems Manager (SSM) support
+  TalentAxisInstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+            Action:
+              - sts:AssumeRole
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+      Tags:
+        - Key: Name
+          Value: talentaxis-instance-role
+        - Key: Project
+          Value: TalentAxis
+
+  TalentAxisInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Path: /
+      Roles:
+        - !Ref TalentAxisInstanceRole
+
+  # EC2 Instance
+  TalentAxisInstance:
+    Type: AWS::EC2::Instance
+    Properties:
+      ImageId: !Ref LatestAmiId
+      InstanceType: !Ref InstanceType
+      KeyName: !Ref KeyName
+      IamInstanceProfile: !Ref TalentAxisInstanceProfile
+      SecurityGroupIds:
+        - !Ref TalentAxisSecurityGroup
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs:
+            VolumeSize: 20
+            VolumeType: gp3
+            DeleteOnTermination: true
+      Tags:
+        - Key: Name
+          Value: TalentAxis-Production-Server
+        - Key: Project
+          Value: TalentAxis
+        - Key: Environment
+          Value: Production
+      UserData:
+        Fn::Base64: !Sub |
+          #!/bin/bash
+          set -e
+
+          # Update system packages
+          dnf update -y
+
+          # Install Git and Nginx
+          dnf install -y git nginx
+
+          # Install Node.js 20 LTS via NodeSource
+          curl -fsSL https://rpm.nodesource.com/setup_20.x | bash -
+          dnf install -y nodejs
+
+          # Install PM2 process manager globally
+          npm install -g pm2
+
+          # Create production application directories
+          mkdir -p /var/www/talentaxis/frontend
+          mkdir -p /var/www/talentaxis/backend
+          mkdir -p /var/www/talentaxis/backend/uploads/cvs
+
+          # Configure file permissions
+          chown -R ec2-user:ec2-user /var/www/talentaxis
+          chmod -R 775 /var/www/talentaxis
+
+          # User groups configuration for Nginx access
+          usermod -a -G ec2-user nginx || true
+          usermod -a -G nginx ec2-user || true
+
+          # Create custom Nginx configuration
+          cat << 'EOF' > /etc/nginx/conf.d/talentaxis.conf
+          server {
+              listen 80 default_server;
+              listen [::]:80 default_server;
+              server_name _;
+
+              # Allow CV resume uploads up to 10MB
+              client_max_body_size 10M;
+
+              # Frontend Static Build (React SPA)
+              location / {
+                  root /var/www/talentaxis/frontend;
+                  index index.html index.htm;
+                  try_files $uri $uri/ /index.html;
+              }
+
+              # Backend REST API Reverse Proxy
+              location /api/ {
+                  proxy_pass http://127.0.0.1:5000/api/;
+                  proxy_http_version 1.1;
+                  proxy_set_header Upgrade $http_upgrade;
+                  proxy_set_header Connection 'upgrade';
+                  proxy_set_header Host $host;
+                  proxy_set_header X-Real-IP $remote_addr;
+                  proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+                  proxy_set_header X-Forwarded-Proto $scheme;
+                  proxy_cache_bypass $http_upgrade;
+              }
+
+              # Serve uploaded CV documents
+              location /uploads/ {
+                  alias /var/www/talentaxis/backend/uploads/;
+                  expires 30d;
+                  add_header Cache-Control "public, no-transform";
+              }
+          }
+          EOF
+
+          # Remove default Nginx welcome configuration if it conflicts
+          if [ -f /etc/nginx/nginx.conf ]; then
+              sed -i 's/listen       80 default_server;/listen       80;/g' /etc/nginx/nginx.conf 2>/dev/null || true
+              sed -i 's/listen       \[::\]:80 default_server;/listen       \[::\]:80;/g' /etc/nginx/nginx.conf 2>/dev/null || true
+          fi
+
+          # Enable and start Nginx service
+          systemctl daemon-reload
+          systemctl enable nginx
+          systemctl restart nginx
+
+          # Setup PM2 service for system reboot persistence
+          env PATH=$PATH:/usr/bin /usr/lib/node_modules/pm2/bin/pm2 startup systemd -u ec2-user --hp /home/ec2-user || true
+
+Outputs:
+  InstanceId:
+    Description: Instance ID of the provisioned TalentAxis EC2 server
+    Value: !Ref TalentAxisInstance
+    Export:
+      Name: !Sub "${AWS::StackName}-InstanceId"
+
+  PublicIP:
+    Description: Public IPv4 address of the TalentAxis EC2 server
+    Value: !GetAtt TalentAxisInstance.PublicIp
+    Export:
+      Name: !Sub "${AWS::StackName}-PublicIP"
+
+  PublicDNS:
+    Description: Public DNS name of the TalentAxis EC2 server
+    Value: !GetAtt TalentAxisInstance.PublicDnsName
+    Export:
+      Name: !Sub "${AWS::StackName}-PublicDNS"
+
+  WebsiteURL:
+    Description: Live TalentAxis URL
+    Value: !Sub "http://${TalentAxisInstance.PublicIp}"
+    Export:
+      Name: !Sub "${AWS::StackName}-WebsiteURL"
+
+  SecurityGroupId:
+    Description: Security Group ID
+    Value: !Ref TalentAxisSecurityGroup

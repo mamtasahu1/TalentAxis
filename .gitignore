@@ -14,6 +14,10 @@ dist/
 frontend/dist/
 build/
 
+# User Uploads
+backend/uploads/cvs/*
+!backend/uploads/cvs/.gitkeep
+
 # Logs & Temporary Files
 npm-debug.log*
 yarn-debug.log*

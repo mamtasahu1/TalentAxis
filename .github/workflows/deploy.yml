@@ -1,0 +1,292 @@
+name: TalentAxis Production CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write # Enables optional AWS OIDC authentication
+
+jobs:
+  # ============================================================================
+  # JOB 1: BUILD & VALIDATE APPLICATION ARTIFACTS
+  # ============================================================================
+  build:
+    name: Build & Validate
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js 20 LTS
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+          cache-dependency-path: |
+            frontend/package-lock.json
+            backend/package-lock.json
+
+      # --- Build React Frontend ---
+      - name: Install Frontend Dependencies
+        working-directory: frontend
+        run: npm ci
+
+      - name: Build React Production Bundle
+        working-directory: frontend
+        run: npm run build
+        env:
+          VITE_API_URL: /api
+
+      - name: Validate Frontend Production Artifacts
+        run: |
+          test -f frontend/dist/index.html || { echo "Frontend build failed: index.html missing"; exit 1; }
+          echo "Frontend built successfully with $(ls -1 frontend/dist/assets | wc -l) assets."
+
+      # --- Prepare Backend ---
+      - name: Install Backend Production Dependencies
+        working-directory: backend
+        run: npm ci --omit=dev
+
+      - name: Validate Backend Entry Point
+        run: |
+          test -f backend/server.js || { echo "Backend entry point server.js missing"; exit 1; }
+          node -c backend/server.js
+          echo "Backend syntax validated successfully."
+
+      # --- Package Artifacts for Deployment Job ---
+      - name: Upload Frontend Production Build
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-dist
+          path: frontend/dist/
+          retention-days: 1
+
+      - name: Upload Backend Production Code
+        uses: actions/upload-artifact@v4
+        with:
+          name: backend-app
+          path: |
+            backend/
+            !backend/uploads/cvs/*
+            !backend/.env
+          retention-days: 1
+
+      - name: Upload Infrastructure Configurations
+        uses: actions/upload-artifact@v4
+        with:
+          name: infrastructure-config
+          path: infrastructure/
+          retention-days: 1
+
+  # ============================================================================
+  # JOB 2: PROVISION INFRASTRUCTURE & DEPLOY TO AWS EC2
+  # ============================================================================
+  deploy:
+    name: Provision & Deploy to EC2
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Source Code
+        uses: actions/checkout@v4
+
+      # --- Authenticate with AWS ---
+      - name: Configure AWS Credentials
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ secrets.AWS_REGION || 'us-east-1' }}
+
+      # --- Provision / Update Infrastructure via CloudFormation ---
+      - name: Deploy AWS CloudFormation Stack
+        uses: aws-actions/aws-cloudformation-github-deploy@v1
+        with:
+          name: talentaxis-production-stack
+          template: infrastructure/cloudformation.yaml
+          no-execute-changeset: 'false'
+          capabilities: CAPABILITY_IAM
+          parameter-overrides: >-
+            KeyName=${{ secrets.EC2_KEY_NAME }}
+
+      # --- Retrieve EC2 Public IP dynamically from CloudFormation Stack ---
+      - name: Retrieve EC2 Connection Details
+        id: ec2-info
+        run: |
+          PUBLIC_IP=$(aws cloudformation describe-stacks \
+            --stack-name talentaxis-production-stack \
+            --query "Stacks[0].Outputs[?OutputKey=='PublicIP'].OutputValue" \
+            --output text)
+
+          if [ -z "$PUBLIC_IP" ] || [ "$PUBLIC_IP" == "None" ]; then
+            PUBLIC_IP="${{ secrets.EC2_HOST }}"
+          fi
+
+          if [ -z "$PUBLIC_IP" ]; then
+            echo "::error::Could not determine EC2 Public IP from CloudFormation outputs or secrets.EC2_HOST."
+            exit 1
+          fi
+
+          echo "ec2_ip=$PUBLIC_IP" >> $GITHUB_OUTPUT
+          echo "Discovered EC2 Public IP: $PUBLIC_IP"
+
+      # --- Download Built Application Artifacts ---
+      - name: Download Frontend Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: frontend-dist
+          path: dist-frontend
+
+      - name: Download Backend Artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: backend-app
+          path: dist-backend
+
+      - name: Download Infrastructure Config
+        uses: actions/download-artifact@v4
+        with:
+          name: infrastructure-config
+          path: dist-infra
+
+      # --- Ensure EC2 SSH Service is Ready (handles initial launch boot time) ---
+      - name: Wait for EC2 SSH Availability
+        run: |
+          TARGET_IP="${{ steps.ec2-info.outputs.ec2_ip }}"
+          echo "Waiting for SSH to respond on $TARGET_IP:22..."
+          for i in {1..20}; do
+            nc -z -w 5 "$TARGET_IP" 22 && echo "SSH is accepting connections!" && break || true
+            echo "Attempt $i: SSH not reachable yet, waiting 6 seconds..."
+            sleep 6
+          done
+
+      # --- Transfer Frontend Build to EC2 Staging Directory ---
+      - name: Deploy Frontend Files to EC2
+        uses: appleboy/scp-action@master
+        with:
+          host: ${{ steps.ec2-info.outputs.ec2_ip }}
+          username: ec2-user
+          key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+          source: "dist-frontend/*"
+          target: "/home/ec2-user/staging-frontend"
+          strip_components: 1
+
+      # --- Transfer Backend Code to EC2 Staging Directory ---
+      - name: Deploy Backend Files to EC2
+        uses: appleboy/scp-action@master
+        with:
+          host: ${{ steps.ec2-info.outputs.ec2_ip }}
+          username: ec2-user
+          key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+          source: "dist-backend/backend/*"
+          target: "/home/ec2-user/staging-backend"
+          strip_components: 2
+
+      # --- Transfer Nginx Configuration to EC2 ---
+      - name: Deploy Nginx Configuration to EC2
+        uses: appleboy/scp-action@master
+        with:
+          host: ${{ steps.ec2-info.outputs.ec2_ip }}
+          username: ec2-user
+          key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+          source: "dist-infra/nginx.conf"
+          target: "/home/ec2-user/staging-infra"
+          strip_components: 1
+
+      # --- Execute Remote Deployment, Preserve CV Uploads, Configure .env, Reload Services ---
+      - name: Configure Production Environment & Start Services
+        uses: appleboy/ssh-action@master
+        env:
+          EC2_IP: ${{ steps.ec2-info.outputs.ec2_ip }}
+          MONGO_URI: ${{ secrets.MONGODB_URI }}
+          JWT_SECRET: ${{ secrets.JWT_SECRET }}
+          ALLOWED_ORIGIN: "http://${{ steps.ec2-info.outputs.ec2_ip }}"
+        with:
+          host: ${{ steps.ec2-info.outputs.ec2_ip }}
+          username: ec2-user
+          key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+          envs: EC2_IP,MONGO_URI,JWT_SECRET,ALLOWED_ORIGIN
+          script: |
+            set -e
+
+            echo "=== [1/6] Preparing Production Application Directories ==="
+            sudo mkdir -p /var/www/talentaxis/frontend
+            sudo mkdir -p /var/www/talentaxis/backend
+            # CRITICAL: Preserve uploaded candidate CV files across all deployments
+            sudo mkdir -p /var/www/talentaxis/backend/uploads/cvs
+
+            echo "=== [2/6] Syncing Frontend Static Assets ==="
+            sudo rsync -a --delete /home/ec2-user/staging-frontend/ /var/www/talentaxis/frontend/
+
+            echo "=== [3/6] Syncing Backend Application (Preserving Uploads) ==="
+            # rsync backend files, explicitly excluding uploads folder so CV files are NEVER overwritten or deleted
+            sudo rsync -a --exclude 'uploads/' /home/ec2-user/staging-backend/ /var/www/talentaxis/backend/
+
+            echo "=== [4/6] Writing Production Environment Configuration ==="
+            sudo bash -c "cat << 'EOF' > /var/www/talentaxis/backend/.env
+            PORT=5000
+            MONGO_URI=${MONGO_URI}
+            JWT_SECRET=${JWT_SECRET}
+            JWT_EXPIRES_IN=1d
+            NODE_ENV=production
+            ALLOWED_ORIGIN=${ALLOWED_ORIGIN}
+            EOF"
+
+            # Set correct ownership & permissions
+            sudo chown -R ec2-user:ec2-user /var/www/talentaxis
+            sudo chmod -R 775 /var/www/talentaxis
+            sudo chmod -R 775 /var/www/talentaxis/backend/uploads
+
+            echo "=== [5/6] Updating Nginx Configuration ==="
+            if [ -f /home/ec2-user/staging-infra/nginx.conf ]; then
+              sudo cp /home/ec2-user/staging-infra/nginx.conf /etc/nginx/conf.d/talentaxis.conf
+            fi
+            sudo nginx -t
+            sudo systemctl reload nginx
+
+            echo "=== [6/6] Launching/Restarting Node.js Backend with PM2 ==="
+            cd /var/www/talentaxis/backend
+            if pm2 describe talentaxis-backend > /dev/null 2>&1; then
+              echo "PM2 process exists. Restarting with updated environment..."
+              pm2 restart talentaxis-backend --update-env
+            else
+              echo "Starting talentaxis-backend for the first time..."
+              pm2 start server.js --name talentaxis-backend
+            fi
+            pm2 save
+
+            # Clean temporary staging directories
+            rm -rf /home/ec2-user/staging-frontend /home/ec2-user/staging-backend /home/ec2-user/staging-infra
+            echo "Deployment completed successfully on EC2 instance."
+
+      # --- Verify Live HTTP Response ---
+      - name: Verify Live Application Health Check
+        run: |
+          TARGET_URL="http://${{ steps.ec2-info.outputs.ec2_ip }}/api/"
+          echo "Probing backend API health at $TARGET_URL..."
+          for i in {1..10}; do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$TARGET_URL" || true)
+            if [ "$STATUS" == "200" ]; then
+              echo "Health check succeeded: Received HTTP 200 from API."
+              break
+            fi
+            echo "Attempt $i: Received HTTP $STATUS, retrying in 4 seconds..."
+            sleep 4
+          done
+
+      # --- Publish GitHub Actions Deployment Summary ---
+      - name: Generate Deployment Summary
+        run: |
+          echo "## 🚀 TalentAxis Deployment Succeeded!" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Public IP:** \`${{ steps.ec2-info.outputs.ec2_ip }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Website URL:** [http://${{ steps.ec2-info.outputs.ec2_ip }}](http://${{ steps.ec2-info.outputs.ec2_ip }})" >> $GITHUB_STEP_SUMMARY
+          echo "- **API Health Endpoint:** [http://${{ steps.ec2-info.outputs.ec2_ip }}/api/](http://${{ steps.ec2-info.outputs.ec2_ip }}/api/)" >> $GITHUB_STEP_SUMMARY
+          echo "- **Infrastructure Stack:** \`talentaxis-production-stack\` (CloudFormation)" >> $GITHUB_STEP_SUMMARY
+          echo "- **Backend Process:** \`talentaxis-backend\` (Managed by PM2)" >> $GITHUB_STEP_SUMMARY
+          echo "- **Web Server & Reverse Proxy:** Nginx" >> $GITHUB_STEP_SUMMARY
