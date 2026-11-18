@@ -182,38 +182,31 @@ jobs:
             sleep 6
           done
 
-      # --- Transfer Frontend Build to EC2 Staging Directory ---
-      - name: Deploy Frontend Files to EC2
-        uses: appleboy/scp-action@master
-        with:
-          host: ${{ steps.ec2-info.outputs.ec2_ip }}
-          username: ec2-user
-          key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
-          source: "dist-frontend/*"
-          target: "/home/ec2-user/staging-frontend"
-          strip_components: 1
+      # --- Configure SSH Client on Runner ---
+      - name: Configure SSH Client
+        run: |
+          mkdir -p ~/.ssh
+          echo "${{ secrets.EC2_SSH_PRIVATE_KEY }}" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H "${{ steps.ec2-info.outputs.ec2_ip }}" >> ~/.ssh/known_hosts 2>/dev/null
 
-      # --- Transfer Backend Code to EC2 Staging Directory ---
-      - name: Deploy Backend Files to EC2
-        uses: appleboy/scp-action@master
-        with:
-          host: ${{ steps.ec2-info.outputs.ec2_ip }}
-          username: ec2-user
-          key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
-          source: "dist-backend/backend/*"
-          target: "/home/ec2-user/staging-backend"
-          strip_components: 2
+      # --- Transfer Application Files to EC2 ---
+      - name: Transfer Application Files to EC2
+        run: |
+          TARGET_IP="${{ steps.ec2-info.outputs.ec2_ip }}"
+          echo "Creating remote staging directories..."
+          ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ec2-user@$TARGET_IP "mkdir -p /home/ec2-user/staging-frontend /home/ec2-user/staging-backend /home/ec2-user/staging-infra"
 
-      # --- Transfer Nginx Configuration to EC2 ---
-      - name: Deploy Nginx Configuration to EC2
-        uses: appleboy/scp-action@master
-        with:
-          host: ${{ steps.ec2-info.outputs.ec2_ip }}
-          username: ec2-user
-          key: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
-          source: "dist-infra/nginx.conf"
-          target: "/home/ec2-user/staging-infra"
-          strip_components: 1
+          echo "Transferring frontend build..."
+          scp -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no -r dist-frontend/* ec2-user@$TARGET_IP:/home/ec2-user/staging-frontend/
+
+          echo "Transferring backend code..."
+          scp -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no -r dist-backend/* ec2-user@$TARGET_IP:/home/ec2-user/staging-backend/
+
+          echo "Transferring Nginx configuration..."
+          scp -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no dist-infra/nginx.conf ec2-user@$TARGET_IP:/home/ec2-user/staging-infra/
+
+          echo "All application files transferred successfully."
 
       # --- Execute Remote Deployment, Preserve CV Uploads, Configure .env, Reload Services ---
       - name: Configure Production Environment & Start Services
