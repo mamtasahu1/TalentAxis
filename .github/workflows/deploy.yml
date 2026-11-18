@@ -128,6 +128,7 @@ jobs:
           name: talentaxis-production-stack
           template: infrastructure/cloudformation.yaml
           no-execute-changeset: 'false'
+          no-fail-on-empty-changeset: '1'
           parameter-overrides: >-
             KeyName=${{ secrets.EC2_KEY_NAME }}
 
