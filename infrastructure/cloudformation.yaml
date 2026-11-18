@@ -56,42 +56,13 @@ Resources:
         - Key: Project
           Value: TalentAxis
 
-  # IAM Role for EC2 with AWS Systems Manager (SSM) support
-  TalentAxisInstanceRole:
-    Type: AWS::IAM::Role
-    Properties:
-      AssumeRolePolicyDocument:
-        Version: '2012-10-17'
-        Statement:
-          - Effect: Allow
-            Principal:
-              Service:
-                - ec2.amazonaws.com
-            Action:
-              - sts:AssumeRole
-      ManagedPolicyArns:
-        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
-      Tags:
-        - Key: Name
-          Value: talentaxis-instance-role
-        - Key: Project
-          Value: TalentAxis
-
-  TalentAxisInstanceProfile:
-    Type: AWS::IAM::InstanceProfile
-    Properties:
-      Path: /
-      Roles:
-        - !Ref TalentAxisInstanceRole
-
-  # EC2 Instance
+  # EC2 Instance (Pure EC2 - requires no IAM role creation permissions)
   TalentAxisInstance:
     Type: AWS::EC2::Instance
     Properties:
       ImageId: !Ref LatestAmiId
       InstanceType: !Ref InstanceType
       KeyName: !Ref KeyName
-      IamInstanceProfile: !Ref TalentAxisInstanceProfile
       SecurityGroupIds:
         - !Ref TalentAxisSecurityGroup
       BlockDeviceMappings:

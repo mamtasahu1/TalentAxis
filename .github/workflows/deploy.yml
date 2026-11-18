@@ -103,6 +103,23 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ${{ secrets.AWS_REGION || 'us-east-1' }}
 
+      # --- Clean Failed Stack if in ROLLBACK_COMPLETE ---
+      - name: Auto-clean Failed Stack State
+        run: |
+          STACK_STATUS=$(aws cloudformation describe-stacks \
+            --stack-name talentaxis-production-stack \
+            --query "Stacks[0].StackStatus" \
+            --output text 2>/dev/null || echo "DOES_NOT_EXIST")
+
+          echo "Current CloudFormation Stack Status: $STACK_STATUS"
+
+          if [ "$STACK_STATUS" == "ROLLBACK_COMPLETE" ]; then
+            echo "Stack is in ROLLBACK_COMPLETE state. Deleting it to allow clean provisioning..."
+            aws cloudformation delete-stack --stack-name talentaxis-production-stack
+            aws cloudformation wait stack-delete-complete --stack-name talentaxis-production-stack
+            echo "Dead rollback stack deleted successfully."
+          fi
+
       # --- Provision / Update Infrastructure via CloudFormation ---
       - name: Deploy AWS CloudFormation Stack
         uses: aws-actions/aws-cloudformation-github-deploy@v1
@@ -110,7 +127,6 @@ jobs:
           name: talentaxis-production-stack
           template: infrastructure/cloudformation.yaml
           no-execute-changeset: 'false'
-          capabilities: CAPABILITY_IAM
           parameter-overrides: >-
             KeyName=${{ secrets.EC2_KEY_NAME }}
 
