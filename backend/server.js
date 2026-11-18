@@ -43,11 +43,12 @@ app.use('/api/applications', require('./routes/applicationRoutes'));
 app.use('/api/contact', require('./routes/contactRoutes'));
 app.use('/api/notifications', require('./routes/notificationRoutes'));
 
-// Root route for API verification
-app.get('/', (req, res) => {
+// Root & Health check routes for API verification
+app.get(['/', '/api', '/api/health'], (req, res) => {
   res.status(200).json({
     success: true,
     message: 'Internship & Job Portal API is running smoothly',
+    timestamp: new Date().toISOString(),
   });
 });
 

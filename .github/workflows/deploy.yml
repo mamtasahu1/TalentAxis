@@ -262,6 +262,7 @@ jobs:
 
             echo "=== [6/6] Launching/Restarting Node.js Backend with PM2 ==="
             cd /var/www/talentaxis/backend
+            npm install --omit=dev
             if pm2 describe talentaxis-backend > /dev/null 2>&1; then
               echo "PM2 process exists. Restarting with updated environment..."
               pm2 restart talentaxis-backend --update-env
@@ -270,6 +271,8 @@ jobs:
               pm2 start server.js --name talentaxis-backend
             fi
             pm2 save
+            sleep 2
+            pm2 status
 
             # Clean temporary staging directories
             rm -rf /home/ec2-user/staging-frontend /home/ec2-user/staging-backend /home/ec2-user/staging-infra
