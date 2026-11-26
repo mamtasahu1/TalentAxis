@@ -1,12 +1,22 @@
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
 const dotenv = require('dotenv');
+const dns = require('dns');
+const path = require('path');
+
+try {
+  dns.setServers(['8.8.8.8', '8.8.4.4']);
+} catch (e) {}
+
 const User = require('./models/User');
 const Job = require('./models/Job');
 const Application = require('./models/Application');
 const Contact = require('./models/Contact');
 
-dotenv.config();
+dotenv.config({ path: path.join(__dirname, '.env') });
+if (!process.env.MONGO_URI) {
+  dotenv.config({ path: path.join(__dirname, '../.env') });
+}
 
 const seedData = async () => {
   try {
@@ -141,6 +151,7 @@ const seedData = async () => {
     await Application.create({
       studentId: studentUser._id,
       jobId: createdJobs[0]._id,
+      cvPath: 'sample-cv.pdf',
       coverLetter: 'I am passionate about frontend engineering and modern web development. My academic background and hands-on React coursework make me an enthusiastic candidate for Nova Digital Labs.',
       status: 'Under Review',
     });
