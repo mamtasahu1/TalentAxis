@@ -72,6 +72,7 @@ jobs:
           name: backend-app
           path: |
             backend/
+            !backend/node_modules/**
             !backend/uploads/cvs/*
             !backend/.env
           retention-days: 1
@@ -198,11 +199,15 @@ jobs:
           echo "Creating remote staging directories..."
           ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ec2-user@$TARGET_IP "mkdir -p /home/ec2-user/staging-frontend /home/ec2-user/staging-backend /home/ec2-user/staging-infra"
 
-          echo "Transferring frontend build..."
-          scp -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no -r dist-frontend/* ec2-user@$TARGET_IP:/home/ec2-user/staging-frontend/
+          echo "Compressing and transferring frontend build..."
+          tar -czf /tmp/frontend.tar.gz -C dist-frontend .
+          scp -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no /tmp/frontend.tar.gz ec2-user@$TARGET_IP:/home/ec2-user/staging-frontend/
+          ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ec2-user@$TARGET_IP "tar -xzf /home/ec2-user/staging-frontend/frontend.tar.gz -C /home/ec2-user/staging-frontend && rm -f /home/ec2-user/staging-frontend/frontend.tar.gz"
 
-          echo "Transferring backend code..."
-          scp -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no -r dist-backend/* ec2-user@$TARGET_IP:/home/ec2-user/staging-backend/
+          echo "Compressing and transferring backend code..."
+          tar -czf /tmp/backend.tar.gz -C dist-backend .
+          scp -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no /tmp/backend.tar.gz ec2-user@$TARGET_IP:/home/ec2-user/staging-backend/
+          ssh -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no ec2-user@$TARGET_IP "tar -xzf /home/ec2-user/staging-backend/backend.tar.gz -C /home/ec2-user/staging-backend && rm -f /home/ec2-user/staging-backend/backend.tar.gz"
 
           echo "Transferring Nginx configuration..."
           scp -i ~/.ssh/id_rsa -o StrictHostKeyChecking=no dist-infra/nginx.conf ec2-user@$TARGET_IP:/home/ec2-user/staging-infra/
