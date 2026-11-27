@@ -1,5 +1,6 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
+import { getCompanyLogo, formatSalary } from '../utils/companyData';
 
 const JobCard = ({ job, onApplyClick, isStudent, hasApplied }) => {
   if (!job) return null;
@@ -46,7 +47,13 @@ const JobCard = ({ job, onApplyClick, isStudent, hasApplied }) => {
     <div className="job-card">
       <div>
         <div className="job-card-header">
-          <div className="company-logo">{getInitials(job.company)}</div>
+          <div style={{ width: '44px', height: '44px', minWidth: '44px', borderRadius: '10px', overflow: 'hidden', backgroundColor: '#fff', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <img
+              src={getCompanyLogo(job.company)}
+              alt={`${job.company} logo`}
+              style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+            />
+          </div>
           <div className="job-header-info">
             <h3 className="job-title">
               <Link to={`/jobs/${job._id}`}>{job.title}</Link>
@@ -64,7 +71,7 @@ const JobCard = ({ job, onApplyClick, isStudent, hasApplied }) => {
           {job.salary && (
             <>
               <span>•</span>
-              <span style={{ fontWeight: 600, color: 'var(--navy-dark)' }}>{job.salary}</span>
+              <span style={{ fontWeight: 600, color: 'var(--navy-dark)' }}>{formatSalary(job.salary)}</span>
             </>
           )}
           {job.duration && (

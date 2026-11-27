@@ -1,61 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { jobAPI } from '../services/api';
+import { companyProfiles, getCompanyLogo } from '../utils/companyData';
 
 const Companies = () => {
   const [jobs, setJobs] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
-
-  const companyProfiles = [
-    {
-      name: 'Nova Digital Labs',
-      industry: 'Digital Product Engineering',
-      location: 'Remote',
-      description: 'A modern engineering studio focused on building high-performance web applications, design systems, and developer productivity tools.',
-      founded: '2021',
-      size: '50 - 150 employees',
-    },
-    {
-      name: 'CloudScale Systems',
-      industry: 'Cloud Infrastructure & Networks',
-      location: 'Remote',
-      description: 'Provides scalable backend microservices, resilient data streaming, and enterprise infrastructure solutions for high-growth tech ventures.',
-      founded: '2019',
-      size: '100 - 250 employees',
-    },
-    {
-      name: 'Apex Cognitive Labs',
-      industry: 'Applied Artificial Intelligence',
-      location: 'Boston, MA / Hybrid',
-      description: 'Specializes in machine learning research, neural model optimization, and data intelligence pipelines across biotechnology and robotics.',
-      founded: '2022',
-      size: '25 - 50 employees',
-    },
-    {
-      name: 'PixelCraft Studio',
-      industry: 'Product Design & Creative Tech',
-      location: 'New York, NY',
-      description: 'An award-winning product design agency creating accessible design systems, user interfaces, and brand experiences for next-generation software.',
-      founded: '2020',
-      size: '30 - 75 employees',
-    },
-    {
-      name: 'Vanguard Solutions',
-      industry: 'Enterprise Software & Security',
-      location: 'San Francisco, CA',
-      description: 'Delivers mission-critical enterprise platforms, distributed cloud architecture, and security-hardened web applications for global organizations.',
-      founded: '2018',
-      size: '200 - 500 employees',
-    },
-    {
-      name: 'InsightStream Analytics',
-      industry: 'Data Intelligence & Analytics',
-      location: 'Chicago, IL / Remote',
-      description: 'Empowers organizations with predictive analytics, business intelligence dashboards, and real-time operational data processing.',
-      founded: '2020',
-      size: '60 - 120 employees',
-    },
-  ];
 
   useEffect(() => {
     const fetchJobs = async () => {
@@ -133,8 +83,12 @@ const Companies = () => {
               <div key={idx} className="card card-hover" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', padding: '24px' }}>
                 <div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '16px' }}>
-                    <div className="company-logo" style={{ width: '48px', height: '48px', fontSize: '1rem' }}>
-                      {getInitials(comp.name)}
+                    <div style={{ width: '52px', height: '52px', minWidth: '52px', borderRadius: '12px', overflow: 'hidden', boxShadow: '0 2px 6px rgba(0,0,0,0.08)', backgroundColor: '#fff', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                      <img
+                        src={comp.logo || getCompanyLogo(comp.name)}
+                        alt={`${comp.name} logo`}
+                        style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                      />
                     </div>
                     <div>
                       <h2 style={{ fontSize: '1.125rem', fontWeight: 700, color: 'var(--navy-dark)', marginBottom: '2px' }}>

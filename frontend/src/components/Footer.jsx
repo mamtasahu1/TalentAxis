@@ -53,9 +53,6 @@ const Footer = () => {
             <h4 className="footer-heading">Platform</h4>
             <ul className="footer-links">
               <li>
-                <Link to="/about">About Us</Link>
-              </li>
-              <li>
                 <Link to="/contact">Contact Support</Link>
               </li>
               <li>

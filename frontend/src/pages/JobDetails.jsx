@@ -4,6 +4,7 @@ import { jobAPI, applicationAPI } from '../services/api';
 import { useAuth } from '../context/AuthContext';
 import StatusBadge from '../components/StatusBadge';
 import Modal from '../components/Modal';
+import { getCompanyLogo, formatSalary } from '../utils/companyData';
 
 const JobDetails = () => {
   const { id } = useParams();
@@ -158,16 +159,25 @@ const JobDetails = () => {
           {/* Left Column: Details */}
           <div>
             <div className="card" style={{ marginBottom: '20px' }}>
-              <div style={{ marginBottom: '16px' }}>
-                <span className="badge badge-primary" style={{ marginBottom: '8px' }}>
-                  {job.jobType}
-                </span>
-                <h1 style={{ fontSize: '1.875rem', fontWeight: 800, color: 'var(--navy-dark)', marginBottom: '4px' }}>
-                  {job.title}
-                </h1>
-                <h2 style={{ fontSize: '1.125rem', color: 'var(--primary)', fontWeight: 600 }}>
-                  {job.company}
-                </h2>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '16px', marginBottom: '16px' }}>
+                <div style={{ width: '56px', height: '56px', minWidth: '56px', borderRadius: '12px', overflow: 'hidden', backgroundColor: '#fff', border: '1px solid var(--border)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                  <img
+                    src={getCompanyLogo(job.company)}
+                    alt={`${job.company} logo`}
+                    style={{ width: '100%', height: '100%', objectFit: 'contain' }}
+                  />
+                </div>
+                <div>
+                  <span className="badge badge-primary" style={{ marginBottom: '6px' }}>
+                    {job.jobType}
+                  </span>
+                  <h1 style={{ fontSize: '1.875rem', fontWeight: 800, color: 'var(--navy-dark)', marginBottom: '2px' }}>
+                    {job.title}
+                  </h1>
+                  <h2 style={{ fontSize: '1.125rem', color: 'var(--primary)', fontWeight: 600 }}>
+                    {job.company}
+                  </h2>
+                </div>
               </div>
 
               {/* Meta Grid */}
@@ -179,7 +189,7 @@ const JobDetails = () => {
                 {job.salary && (
                   <div>
                     <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)', display: 'block' }}>Compensation</span>
-                    <strong style={{ color: 'var(--navy-dark)', fontSize: '0.875rem' }}>{job.salary}</strong>
+                    <strong style={{ color: 'var(--navy-dark)', fontSize: '0.875rem' }}>{formatSalary(job.salary)}</strong>
                   </div>
                 )}
                 <div>

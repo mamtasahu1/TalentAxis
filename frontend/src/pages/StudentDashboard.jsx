@@ -5,6 +5,7 @@ import { applicationAPI, jobAPI } from '../services/api';
 import StatusBadge from '../components/StatusBadge';
 import Modal from '../components/Modal';
 import JobCard from '../components/JobCard';
+import { formatSalary } from '../utils/companyData';
 
 const StudentDashboard = () => {
   const { user } = useAuth();
@@ -442,7 +443,7 @@ const StudentDashboard = () => {
             <div style={{ marginBottom: '14px', padding: '12px', backgroundColor: 'var(--bg-subtle)', borderRadius: 'var(--radius-md)' }}>
               <div style={{ fontWeight: 700, color: 'var(--navy-dark)' }}>{selectedJob.company}</div>
               <div style={{ fontSize: '0.8125rem', color: 'var(--text-secondary)' }}>
-                {selectedJob.location} • {selectedJob.jobType} {selectedJob.salary && `• ${selectedJob.salary}`}
+                {selectedJob.location} • {selectedJob.jobType} {selectedJob.salary && `• ${formatSalary(selectedJob.salary)}`}
               </div>
             </div>
 

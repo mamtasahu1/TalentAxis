@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { jobAPI } from '../../services/api';
 import Modal from '../../components/Modal';
 import Pagination from '../../components/Pagination';
+import { formatSalary } from '../../utils/companyData';
 
 const AdminJobs = () => {
   const [jobs, setJobs] = useState([]);
@@ -220,7 +221,7 @@ const AdminJobs = () => {
                     </td>
                     <td>
                       <span style={{ fontSize: '0.8125rem', fontWeight: 600, color: 'var(--navy-dark)' }}>
-                        {job.salary || 'Competitive'}
+                        {formatSalary(job.salary) || 'Competitive'}
                       </span>
                     </td>
                     <td>

@@ -42,18 +42,6 @@ const Login = () => {
     }
   };
 
-  const fillStudentDemo = () => {
-    setEmail('student@talentaxis.com');
-    setPassword('password123');
-    setError('');
-  };
-
-  const fillAdminDemo = () => {
-    setEmail('admin@talentaxis.com');
-    setPassword('password123');
-    setError('');
-  };
-
   return (
     <div className="auth-page">
       <div className="container">
@@ -61,29 +49,6 @@ const Login = () => {
           <div className="auth-header">
             <h1 className="auth-title">TalentAxis Login</h1>
             <p className="auth-subtitle">Sign in to your account</p>
-          </div>
-
-          {/* Quick Demo Fill Credentials Box */}
-          <div className="demo-credentials-box">
-            <div className="demo-title">Explore With Demo Accounts</div>
-            <div className="demo-buttons-row">
-              <button
-                type="button"
-                onClick={fillStudentDemo}
-                className="btn btn-secondary btn-sm"
-                style={{ flex: 1 }}
-              >
-                Student Demo
-              </button>
-              <button
-                type="button"
-                onClick={fillAdminDemo}
-                className="btn btn-secondary btn-sm"
-                style={{ flex: 1 }}
-              >
-                Admin Demo
-              </button>
-            </div>
           </div>
 
           {error && <div className="alert alert-error">{error}</div>}

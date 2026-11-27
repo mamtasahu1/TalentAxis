@@ -181,14 +181,14 @@ const AdminCreateJob = () => {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
             <div className="form-group">
               <label className="form-label" htmlFor="createSalary">
-                Compensation / Stipend
+                Compensation / Stipend (NPR)
               </label>
               <input
                 type="text"
                 id="createSalary"
                 name="salary"
                 className="form-control"
-                placeholder="e.g. $35 - $42 / hr or $3,500 / mo"
+                placeholder="e.g. NPR 35,000 - 50,000 / mo"
                 value={formData.salary}
                 onChange={handleChange}
               />

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { jobAPI, applicationAPI, contactAPI, userAPI } from '../../services/api';
 import StatusBadge from '../../components/StatusBadge';
+import { formatSalary } from '../../utils/companyData';
 
 const AdminOverview = () => {
   const [stats, setStats] = useState({
@@ -250,7 +251,7 @@ const AdminOverview = () => {
                       {job.title}
                     </strong>
                     <span style={{ fontSize: '0.75rem', color: 'var(--text-secondary)' }}>
-                      {job.company} • {job.jobType} {job.salary && `• ${job.salary}`}
+                      {job.company} • {job.jobType} {job.salary && `• ${formatSalary(job.salary)}`}
                     </span>
                   </div>
                   <Link to={`/admin/jobs/${job._id}/edit`} className="btn btn-secondary btn-sm" style={{ padding: '4px 10px', fontSize: '0.75rem' }}>
